@@ -1,4 +1,4 @@
-# mssqldb_exporter
+# SQLServer_exporter
 WIP: a Microsoft SQL database exporter written in go
 
 The example metrics.toml shows the needed information to connect to the database.

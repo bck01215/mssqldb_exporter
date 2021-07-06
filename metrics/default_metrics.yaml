@@ -1,0 +1,19 @@
+metrics:
+  - name: number_of_conns
+    help: The number connections to the instance
+    value: value
+    labels:
+    - team
+    - service
+    statement:
+      select COUNT(dbid) as value, 'lol' as team, 'ha' as service FROM sys.sysprocesses
+
+  - name: boo
+    help: The number connections to the instance
+    value: value
+    labels:
+    - team
+    - service
+    statement:
+      select 'momma' as value, 'lol' as service, 'ha' as team FROM sys.sysprocesses
+      

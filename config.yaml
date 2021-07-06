@@ -1,0 +1,16 @@
+configs:
+  - connection: con_name
+    host: fqdn
+    port: 6000
+    username: user
+    password: password
+    metric_files:
+    - default_metrics.yaml
+    - unique.yaml
+
+  - connection: con_name
+    host: host.example.com
+    username: user
+    password: pass
+    metric_files:
+    - default_metrics.yaml
