@@ -15,12 +15,22 @@ type error interface {
 	Error() string
 }
 
+var sqlServerUp = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "sqlserver_up",
+		Help: "If the connection to the server was successfull",
+	},
+	[]string{"error"},
+)
+
 func do_stuff(w http.ResponseWriter, r *http.Request) {
 	target := r.URL.Query().Get("target")
 	configs := get_metric_info(target)
 	registry := prometheus.NewRegistry()
+	registry.MustRegister(sqlServerUp)
+
 	for _, metric := range configs.Metrics {
-		make_gauges(registry, metric)
+		makeGauges(registry, metric)
 	}
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
@@ -35,7 +45,7 @@ func main() {
 	logrus.Fatal(http.ListenAndServe(":9101", nil))
 }
 
-func make_gauges(reg *prometheus.Registry, metric Metric) {
+func makeGauges(reg *prometheus.Registry, metric Metric) {
 	var label_vals []string
 	any_errs := false
 L:
@@ -50,7 +60,7 @@ L:
 
 		}
 	}
-	if any_errs == false {
+	if !any_errs {
 		x := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: metric.Name,
 			Help: metric.Help,

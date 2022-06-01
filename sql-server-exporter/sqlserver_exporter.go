@@ -3,10 +3,13 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"sync"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/sirupsen/logrus"
 )
+
+var waitGroup sync.WaitGroup
 
 func sql_exporter(name string) Config {
 
@@ -31,20 +34,30 @@ func get_config(name string, configs []Config) (Config, error) {
 }
 func get_metric_info(server_con string) Config {
 	conf := sql_exporter(server_con)
-	db := connect(conf)
-	for i, metric := range conf.Metrics {
-		values, err := run_query(db, metric.Statement, metric.Value)
-		if err != nil {
-			logrus.Error("Error collecting metrics:\n\t", err)
-			continue
+	db, err := connect(conf)
+	if err == nil {
+		waitGroup.Add(len(conf.Metrics))
+		for i, metric := range conf.Metrics {
+			go func(i int, metric Metric) {
+				values, err := run_query(db, metric.Statement, metric.Value)
+				if err != nil {
+					logrus.Error("Error collecting metrics:\n\t", err)
+
+				} else {
+					conf.Metrics[i].Values = values
+				}
+				defer waitGroup.Done()
+			}(i, metric)
 		}
-		conf.Metrics[i].Values = values
+		waitGroup.Wait()
+	} else {
+		conf.Metrics = make([]Metric, 0)
 	}
 	db.Close()
 	return conf
 }
 
-func connect(con Config) *sql.DB {
+func connect(con Config) (*sql.DB, error) {
 	connect := ""
 	if con.Port != "" {
 		connect = ("server=" + con.Host +
@@ -56,11 +69,18 @@ func connect(con Config) *sql.DB {
 			";user id=" + con.Username +
 			";password=" + con.Password + ";")
 	}
-	db, err := sql.Open("mssql", connect)
-	if err != nil {
-		logrus.Error(err)
+	db, _ := sql.Open("mssql", connect)
+	sqlServerUp.Reset()
+	Err := db.Ping()
+	if Err != nil {
+		logrus.Error(Err)
+		sqlServerUp.WithLabelValues(Err.Error()).Set(float64(0))
+
+	} else {
+		sqlServerUp.WithLabelValues("").Set(float64(1))
 	}
-	return db
+
+	return db, Err
 }
 
 func run_query(db *sql.DB, statement string, val_column string) (map[string]interface{}, error) {
@@ -82,7 +102,9 @@ func run_query(db *sql.DB, statement string, val_column string) (map[string]inte
 			valuePtrs[i] = &values[i]
 		}
 
-		rows.Scan(valuePtrs...)
+		if err := rows.Scan(valuePtrs...); err != nil {
+			logrus.Error(err)
+		}
 
 		for i, col := range columns {
 			val := values[i]
