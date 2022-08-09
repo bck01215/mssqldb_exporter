@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
-	"path"
+	"os"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,26 +25,22 @@ var sqlServerUp = prometheus.NewGaugeVec(
 
 func do_stuff(w http.ResponseWriter, r *http.Request) {
 	target := r.URL.Query().Get("target")
-	configs := get_metric_info(target)
+	configs := Get_Metric_Info(target)
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(sqlServerUp)
-
 	for _, metric := range configs.Metrics {
 		makeGauges(registry, metric)
 	}
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
 }
-
 func main() {
 	logrus.Info("Starting exporter")
-	http.HandleFunc(path.Join("/probe"), func(w http.ResponseWriter, r *http.Request) {
-		do_stuff(w, r)
-	})
-
+	mainPage()
+	configPage()
+	probePage()
 	logrus.Fatal(http.ListenAndServe(":9101", nil))
 }
-
 func makeGauges(reg *prometheus.Registry, metric Metric) {
 	var label_vals []string
 	any_errs := false
@@ -57,7 +53,6 @@ L:
 			break L
 		default:
 			label_vals = append(label_vals, metric.Values[i].(string))
-
 		}
 	}
 	if !any_errs {
@@ -71,7 +66,6 @@ L:
 		}
 	}
 }
-
 func set_values(x *prometheus.GaugeVec, label_vals []string, metric Metric) (*prometheus.GaugeVec, error) {
 	switch metric.Values[metric.Value].(type) {
 	case float64:
@@ -89,4 +83,47 @@ func set_values(x *prometheus.GaugeVec, label_vals []string, metric Metric) (*pr
 		return nil, errors.New("Metric data collection failed. Unable to add metric: " + metric.Name)
 	}
 	return x, nil
+}
+func mainPage() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html>
+        <head>
+        <title>MSSQL Exporter</title>
+        <style>
+        label{
+        display:inline-block;
+        width:75px;
+        }
+        form label {
+        margin: 10px;
+        }
+        form input {
+        margin: 10px;
+        }
+        </style>
+        </head>
+        <body>
+        <h1>MSSQL Exporter</h1>
+        <form action="/probe">
+        <label>Target:</label> <input type="text" name="target" placeholder="www.example.com" value=""><br>
+        <input type="submit" value="Submit">
+        </form>
+        <p><a href="config">Config</a></p>
+        </body>
+        </html>`))
+	})
+}
+func configPage() {
+	http.HandleFunc("/config/", func(w http.ResponseWriter, r *http.Request) {
+		body, err := os.ReadFile("./config.yaml")
+		if err != nil {
+			logrus.Print(err)
+		}
+		w.Write([]byte(body))
+	})
+}
+func probePage() {
+	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
+		do_stuff(w, r)
+	})
 }
