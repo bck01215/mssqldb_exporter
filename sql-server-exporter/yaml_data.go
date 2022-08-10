@@ -44,7 +44,7 @@ var config = flag.String("config",
 	os.Getenv("PWD")+"/config.yaml",
 	"Location of config file: Defaults to your path's config.yml")
 
-func get_conns() Connections {
+func Get_Conns() Connections {
 	flag.Parse()
 	connections := get_conf_struct(*config)
 

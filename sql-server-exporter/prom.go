@@ -2,8 +2,9 @@ package main
 
 import (
 	"errors"
+	"html/template"
+	"log"
 	"net/http"
-	"os"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,7 +26,7 @@ var sqlServerUp = prometheus.NewGaugeVec(
 
 func do_stuff(w http.ResponseWriter, r *http.Request) {
 	target := r.URL.Query().Get("target")
-	configs := Get_Metric_Info(target)
+	configs := get_metric_info(target)
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(sqlServerUp)
 	for _, metric := range configs.Metrics {
@@ -37,10 +38,10 @@ func do_stuff(w http.ResponseWriter, r *http.Request) {
 func main() {
 	logrus.Info("Starting exporter")
 	mainPage()
-	configPage()
 	probePage()
 	logrus.Fatal(http.ListenAndServe(":9101", nil))
 }
+
 func makeGauges(reg *prometheus.Registry, metric Metric) {
 	var label_vals []string
 	any_errs := false
@@ -86,7 +87,10 @@ func set_values(x *prometheus.GaugeVec, label_vals []string, metric Metric) (*pr
 }
 func mainPage() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html>
+
+		data := targetList()
+
+		const tmpl = `<html>
         <head>
         <title>MSSQL Exporter</title>
         <style>
@@ -105,25 +109,37 @@ func mainPage() {
         <body>
         <h1>MSSQL Exporter</h1>
         <form action="/probe">
-        <label>Target:</label> <input type="text" name="target" placeholder="www.example.com" value=""><br>
-        <input type="submit" value="Submit">
+        <label>Targets:</label>
+		{{ range $i := .}}
+		<p><a href="/probe?target={{$i}}">{{$i}}<br/>
+		{{end}}</a></p>
         </form>
-        <p><a href="config">Config</a></p>
         </body>
-        </html>`))
-	})
-}
-func configPage() {
-	http.HandleFunc("/config/", func(w http.ResponseWriter, r *http.Request) {
-		body, err := os.ReadFile("./config.yaml")
+        </html>`
+
+		t, err := template.New("webpage").Parse(tmpl)
 		if err != nil {
-			logrus.Print(err)
+			log.Fatal(err)
 		}
-		w.Write([]byte(body))
+		t.Execute(w, data)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
 	})
 }
+
 func probePage() {
 	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
 		do_stuff(w, r)
 	})
+}
+
+func targetList() []string {
+	result := Get_Conns()
+	var targets []string
+	for _, val := range result.Configs {
+		targets = append(targets, val.Host)
+	}
+	return targets
 }
