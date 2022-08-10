@@ -139,7 +139,7 @@ func targetList() []string {
 	result := Get_Conns()
 	var targets []string
 	for _, val := range result.Configs {
-		targets = append(targets, val.Host)
+		targets = append(targets, val.Connection)
 	}
 	return targets
 }
