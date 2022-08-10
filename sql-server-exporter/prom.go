@@ -2,8 +2,9 @@ package main
 
 import (
 	"errors"
+	"html/template"
+	"log"
 	"net/http"
-	"path"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,20 +29,16 @@ func do_stuff(w http.ResponseWriter, r *http.Request) {
 	configs := get_metric_info(target)
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(sqlServerUp)
-
 	for _, metric := range configs.Metrics {
 		makeGauges(registry, metric)
 	}
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
 }
-
 func main() {
 	logrus.Info("Starting exporter")
-	http.HandleFunc(path.Join("/probe"), func(w http.ResponseWriter, r *http.Request) {
-		do_stuff(w, r)
-	})
-
+	mainPage()
+	probePage()
 	logrus.Fatal(http.ListenAndServe(":9101", nil))
 }
 
@@ -57,7 +54,6 @@ L:
 			break L
 		default:
 			label_vals = append(label_vals, metric.Values[i].(string))
-
 		}
 	}
 	if !any_errs {
@@ -71,7 +67,6 @@ L:
 		}
 	}
 }
-
 func set_values(x *prometheus.GaugeVec, label_vals []string, metric Metric) (*prometheus.GaugeVec, error) {
 	switch metric.Values[metric.Value].(type) {
 	case float64:
@@ -89,4 +84,62 @@ func set_values(x *prometheus.GaugeVec, label_vals []string, metric Metric) (*pr
 		return nil, errors.New("Metric data collection failed. Unable to add metric: " + metric.Name)
 	}
 	return x, nil
+}
+func mainPage() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		data := targetList()
+
+		const tmpl = `<html>
+        <head>
+        <title>MSSQL Exporter</title>
+        <style>
+        label{
+        display:inline-block;
+        width:75px;
+        }
+        form label {
+        margin: 10px;
+        }
+        form input {
+        margin: 10px;
+        }
+        </style>
+        </head>
+        <body>
+        <h1>MSSQL Exporter</h1>
+        <form action="/probe">
+        <label>Targets:</label>
+		{{ range $i := .}}
+		<p><a href="/probe?target={{$i}}">{{$i}}<br/>
+		{{end}}</a></p>
+        </form>
+        </body>
+        </html>`
+
+		t, err := template.New("webpage").Parse(tmpl)
+		if err != nil {
+			log.Fatal(err)
+		}
+		t.Execute(w, data)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+	})
+}
+
+func probePage() {
+	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
+		do_stuff(w, r)
+	})
+}
+
+func targetList() []string {
+	result := Get_Conns()
+	var targets []string
+	for _, val := range result.Configs {
+		targets = append(targets, val.Connection)
+	}
+	return targets
 }

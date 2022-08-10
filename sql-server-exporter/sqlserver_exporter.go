@@ -13,7 +13,7 @@ var waitGroup sync.WaitGroup
 
 func sql_exporter(name string) Config {
 
-	conf, err := get_config(name, get_conns().Configs)
+	conf, err := get_config(name, Get_Conns().Configs)
 	if err != nil {
 		logrus.Error(err)
 
